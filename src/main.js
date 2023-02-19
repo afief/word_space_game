@@ -74,7 +74,7 @@ function preload() {
   this.load.image("bg", "assets/bg.jpg")
 
 
-  this.load.audio(`audio_manakah`, `assets/audios/manakah.mp3`);
+  this.load.audio(`audio_manakah`, `assets/audios/Manakah.mp3`);
   this.load.audio(`audio_explosion`, `assets/audios/explosion.mp3`);
   BASE_LETTERS.forEach((letter) => {
     this.load.audio(`audio_${letter}`, `assets/audios/${letter}.mp3`);
