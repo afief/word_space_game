@@ -1,5 +1,5 @@
 // const BASE_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
-const BASE_LETTERS = ['AFIEF', 'AKSARA', 'AKU', 'BACA', 'BEMO', 'BUDI', 'KINAS', 'KOTA', 'PUTRI', 'SEPEDA', 'TULIS', 'UANG'];
+const BASE_LETTERS = ['AFIEF', 'AKU', 'BACA', 'BEMO', 'BUDI', 'KINAS', 'KOTA', 'PUTRI', 'SEPEDA', 'TULIS', 'UANG', 'LIMA', 'IKAN', 'HARI', 'GAJAH', 'FAJAR', 'EMAS', 'DINO', 'CARI', 'MAKAN', 'JALAN', 'KACA', 'MATA'];
 
 const baseConfig = {
   type: Phaser.AUTO,
@@ -7,18 +7,9 @@ const baseConfig = {
   dom: {
     createContainer: true
   },
-  physics: {
-    default: 'arcade',
-    arcade: {
-      gravity: { y: 200 }
-    }
-  },
   scene: {
     preload: preload,
     create: create
-  },
-  audio: {
-    disableWebAudio: true
   }
 };
 
@@ -42,6 +33,7 @@ const Background = new Phaser.Class({
 
     const image = this.createOne(scene, 0)
     this.add(image)
+    this.add(this.createOne(scene, 0 - image.height * image.scaleY))
     this.add(this.createOne(scene, image.height * image.scaleY))
     this.add(this.createOne(scene, image.height * 2 * image.scaleY))
 
@@ -49,7 +41,7 @@ const Background = new Phaser.Class({
       scene.tweens.add({
         targets: this,
         duration: 10000,
-        y: 0 - image.height * image.scaleY,
+        y: 0 + image.height * image.scaleY,
         delay: 0,
         onComplete: () => {
           this.y = 0;
@@ -72,10 +64,11 @@ function preload() {
   this.load.script('webfont', 'https://ajax.googleapis.com/ajax/libs/webfont/1.6.26/webfont.js');
   this.load.atlasXML('space', 'assets/spaceShooter2_spritesheet.png', 'assets/spaceShooter2_spritesheet.xml');
   this.load.image("bg", "assets/bg.jpg")
-
+  this.load.image("star", "assets/star.png")
 
   this.load.audio(`audio_manakah`, `assets/audios/Manakah.mp3`);
   this.load.audio(`audio_explosion`, `assets/audios/explosion.mp3`);
+  this.load.audio(`audio_completed`, `assets/audios/mission_completed.ogg`);
   BASE_LETTERS.forEach((letter) => {
     this.load.audio(`audio_${letter}`, `assets/audios/${letter}.mp3`);
   })
@@ -85,8 +78,7 @@ function preload() {
 
 function create() {
   this.input.mouse.disableContextMenu();
-
-  this.children.add(new Background(this, 0, 0))
+  this.children.add(new Background(this, 0, 0));
 
   // cache audios
   const audios = {};
@@ -95,9 +87,13 @@ function create() {
   });
   audios.manakah = this.sound.add('audio_manakah');
   audios.explosion = this.sound.add('audio_explosion');
+  audios.completed = this.sound.add("audio_completed");
 
   const options = [];
+  let isShooting = false;
   let answer = '';
+  let answerCorrect = 0;
+  let answerTotal = 0;
 
   const createShip = () => {
     const atlasTexture = this.textures.get('space')
@@ -134,7 +130,7 @@ function create() {
       const letter = letters[hi];
       letters.splice(hi, 1);
 
-      options.push(addOptions(letter, padding * (i + 1), Math.random() * 100 + 100, i))
+      options.push(addOptions(letter, padding * (i + 1), (i % 2) * (this.game.canvas.height / 6) + 100, i))
       ta.push(letter)
     }
 
@@ -160,7 +156,10 @@ function create() {
         y: y - (Math.random() * 50 + 70),
         x: x + (index - parts.length / 2) * 50,
         ease: 'Power1',
-        alpha: 0
+        alpha: 0.2,
+        onComplete: () => {
+          p.destroy();
+        }
       })
     })
   }
@@ -180,21 +179,32 @@ function create() {
   }
 
   const handleOptionClick = (x, y, val, index) => {
+    if (isShooting) return false;
+    isShooting = true;
     const mis = this.add.image(this._space.x, this._space.y, 'space', 'spaceMissiles_001.png');
     const misRotate = Phaser.Math.Angle.Between(mis.x, mis.y, x, y) + Phaser.Math.DegToRad(90);
+    mis.rotation = misRotate;
 
     const judge = () => {
       audios.explosion.play();
       mis.destroy();
 
+      answerTotal++;
       if (val === answer) {
         destroyOptions();
-        setTimeout(() => {
-          generateLevel();
-        }, 500)
+        setTimeout(() => { // reset level or final
+          if (answerTotal >= 12) {
+            finalBoard();
+          } else {
+            generateLevel();
+          }
+        }, 500);
+        answerCorrect++;
       } else {
+        if (answerCorrect > 0) answerCorrect--;
         destroyOptions(index);
       }
+      isShooting = false;
     }
 
     this.tweens.add({
@@ -206,7 +216,6 @@ function create() {
     this.tweens.add({
       targets: mis,
       duration: 500,
-      rotation: misRotate,
       x: x,
       y: y,
       onComplete: judge
@@ -215,13 +224,13 @@ function create() {
 
   const addOptions = (text, x, y, index) => {
     const bg = this.add.image(0, 0, "space", `spaceMeteors_00${index + 1}.png`);
-    bg.setScale(0.5);
-
-    const t = this.add.text(0, 0, text, { fontFamily: 'Finger Paint', fontSize: 40, color: '#ffffff' });
+    const t = this.add.text(0, 0, text, { fontFamily: 'Finger Paint', fontSize: 50, color: '#ffffff' });
     t.setOrigin(0.5, 0.5);
 
     const g = this.add.container(x, -50, [bg, t]);
     bg.setInteractive().on('pointerup', () => handleOptionClick(x, y, text, index)); // on click
+
+    g.setScale(0.5)
 
     this.tweens.add({
       targets: g,
@@ -233,10 +242,68 @@ function create() {
     return g
   }
 
+  const addStar = (x, y, alpha = 1, angle = 0) => {
+    const star = this.add.image(x, y, 'star');
+    star.alpha = alpha
+    star.angle = angle
+    return star
+  }
+
+  const finalBoard = () => {
+    const numStar = Math.floor(answerCorrect / answerTotal * 3);
+    const padding = this.game.canvas.width / 4
+    const stars = [];
+    for (let i = 0; i < 3; i++) {
+      const star = addStar(padding * (i + 1), -100, i < numStar ? 1 : 0.3, (i - 1) * 10);
+      this.tweens.add({
+        targets: star,
+        duration: 1000,
+        y: this.game.canvas.height / 5 + Math.abs((i - 1) * 20),
+        ease: 'Back',
+        delay: i * 300,
+        easeParams: [4]
+      })
+      stars.push(star);
+    }
+    
+    audios.completed.play();
+
+    initializeButton("Ulangi", this.game.canvas.width / 2, this.game.canvas.height / 7 * 4, () => {
+      answerTotal = 0;
+      answerCorrect = 0;
+      answer = '';
+      stars.forEach((s) => {
+        s.destroy();
+      })
+      generateLevel();
+    })
+  }
+
+  const initializeButton = (label, x, y, onclick = () => { }) => {
+    const menuBg = this.add.image(0, 0, 'space', 'spaceRockets_004.png')
+    menuBg.angle = 90;
+    const text = this.add.text(0, 0, label, { fontFamily: 'Finger Paint', fontSize: 50, color: '#444444' });
+    text.setOrigin(0.5, 0.5)
+
+    const g = this.add.container(x, y, [menuBg, text]);
+    g.setScale(0.5, 0.5);
+
+    menuBg.setInteractive().on('pointerup', () => {
+      onclick();
+      g.destroy();
+    }); // on click
+  }
+
+  const initializeMenu = () => {
+    initializeButton("Mulai", this.game.canvas.width / 2, this.game.canvas.height / 7 * 6, () => {
+      createShip();
+    })
+  }
+
   WebFont.load({
     google: {
       families: ['Freckle Face', 'Finger Paint', 'Nosifer']
     },
-    active: createShip
+    active: initializeMenu
   });
 }
