@@ -295,7 +295,7 @@ function create() {
   }
 
   const initializeMenu = () => {
-    initializeButton("Mulai", this.game.canvas.width / 2, this.game.canvas.height / 7 * 6, () => {
+    initializeButton("Mulai", this.game.canvas.width / 2, this.game.canvas.height / 2, () => {
       createShip();
     })
   }
